@@ -1,0 +1,15 @@
+{
+  "name": "Glow Log",
+  "short_name": "Glow Log",
+  "description": "GLP-1 dose and symptom tracker",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#B79AEE",
+  "theme_color": "#8A6EDD",
+  "orientation": "portrait",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
