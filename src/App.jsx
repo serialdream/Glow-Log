@@ -293,6 +293,14 @@ export default function App() {
         <p style={{ color: '#F0EAFC', fontSize: 13, margin: '4px 0 0', fontWeight: 600 }}>
           your GLP-1 journey, written in the stars ✨
         </p>
+        <a href="#fit" style={{
+          display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 10,
+          padding: '6px 14px', borderRadius: 14, background: 'rgba(255,255,255,0.22)',
+          color: '#fff', fontSize: 12, fontWeight: 700, textDecoration: 'none',
+          backdropFilter: 'blur(6px)',
+        }}>
+          🏋️ Fit Log — bike rides & gym sessions →
+        </a>
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginBottom: 20, position: 'relative' }}>
@@ -351,7 +359,7 @@ export default function App() {
       <div style={{ maxWidth: 480, margin: '0 auto', padding: '0 16px', position: 'relative' }}>
         {view === 'log' ? (
           <>
-            <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 8, marginBottom: 16 }}>
+            <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 8, marginBottom: 10 }}>
               {Array.from({ length: 7 }).map((_, i) => {
                 const d = new Date();
                 d.setDate(d.getDate() - (6 - i));
@@ -382,6 +390,27 @@ export default function App() {
                   </button>
                 );
               })}
+            </div>
+
+            {/* Manual date picker for backfilling entries older than 7 days */}
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16,
+              background: 'rgba(255,255,255,0.28)', borderRadius: 14, padding: '8px 12px',
+              backdropFilter: 'blur(6px)',
+            }}>
+              <span style={{ fontSize: 12, color: '#fff', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                Log an earlier date:
+              </span>
+              <input
+                type="date"
+                value={selectedDate}
+                max={todayStr()}
+                onChange={(e) => e.target.value && setSelectedDate(e.target.value)}
+                style={{
+                  flex: 1, border: 'none', borderRadius: 10, padding: '6px 10px',
+                  fontSize: 12, fontWeight: 600, color: '#6D45C4', background: 'rgba(255,255,255,0.9)',
+                }}
+              />
             </div>
 
             <div style={{
