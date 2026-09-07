@@ -21,6 +21,19 @@ const fmtDate = (d) =>
 
 const fmtTime = (s) =>
   `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+function mergeById(localItems = [], cloudItems = []) {
+  const map = new Map();
+
+  cloudItems.forEach((item) => {
+    if (item?.id) map.set(item.id, item);
+  });
+
+  localItems.forEach((item) => {
+    if (item?.id) map.set(item.id, item);
+  });
+
+  return Array.from(map.values());
+}
 
 function topSet(exercise) {
   if (!exercise.sets || exercise.sets.length === 0) return null;
@@ -204,68 +217,84 @@ export default function FitLog() {
   };
 
   useEffect(() => {
-    async function loadData() {
-      let localSessions = [];
-      let localCardio = [];
+  async function loadData() {
+    let localSessions = [];
+    let localCardio = [];
 
-      try {
-        const s = localStorage.getItem('fitlog-sessions');
+    try {
+      const s = localStorage.getItem('fitlog-sessions');
+      if (s) localSessions = JSON.parse(s);
+    } catch (e) {}
 
-        if (s) {
-          localSessions = JSON.parse(s);
-          setSessions(localSessions);
-        }
-      } catch (e) {}
+    try {
+      const c = localStorage.getItem('fitlog-cardio');
+      if (c) localCardio = JSON.parse(c);
+    } catch (e) {}
 
-      try {
-        const c = localStorage.getItem('fitlog-cardio');
+    try {
+      const response = await fetch(`${API_URL}/api/state`);
 
-        if (c) {
-          localCardio = JSON.parse(c);
-          setCardioEntries(localCardio);
-        }
-      } catch (e) {}
-
-      try {
-        const response = await fetch(`${API_URL}/api/state`);
-
-        if (!response.ok) {
-          throw new Error(
-            `Cloud load failed: ${response.status}`
-          );
-        }
-
-        const cloud = await response.json();
-
-        if (Array.isArray(cloud.sessions)) {
-          setSessions(cloud.sessions);
-
-          localStorage.setItem(
-            'fitlog-sessions',
-            JSON.stringify(cloud.sessions)
-          );
-        }
-
-        if (Array.isArray(cloud.cardioEntries)) {
-          setCardioEntries(cloud.cardioEntries);
-
-          localStorage.setItem(
-            'fitlog-cardio',
-            JSON.stringify(cloud.cardioEntries)
-          );
-        }
-      } catch (err) {
-        console.log(
-          'Fit Log cloud unavailable, using local backup',
-          err
-        );
-      } finally {
-        setLoading(false);
+      if (!response.ok) {
+        throw new Error(`Cloud load failed: ${response.status}`);
       }
-    }
 
-    loadData();
-  }, []);
+      const cloud = await response.json();
+
+      const cloudSessions = Array.isArray(cloud.sessions)
+        ? cloud.sessions
+        : [];
+
+      const cloudCardio = Array.isArray(cloud.cardioEntries)
+        ? cloud.cardioEntries
+        : [];
+
+      const mergedSessions = mergeById(
+        localSessions,
+        cloudSessions
+      );
+
+      const mergedCardio = mergeById(
+        localCardio,
+        cloudCardio
+      );
+
+      setSessions(mergedSessions);
+      setCardioEntries(mergedCardio);
+
+      localStorage.setItem(
+        'fitlog-sessions',
+        JSON.stringify(mergedSessions)
+      );
+
+      localStorage.setItem(
+        'fitlog-cardio',
+        JSON.stringify(mergedCardio)
+      );
+
+      await fetch(`${API_URL}/api/state`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          ...cloud,
+          sessions: mergedSessions,
+          cardioEntries: mergedCardio,
+        }),
+      });
+
+    } catch (err) {
+      console.log('Cloud unavailable, keeping local Fit Log data', err);
+
+      setSessions(localSessions);
+      setCardioEntries(localCardio);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  loadData();
+}, []);
 
   useEffect(() => {
     if (running && secondsLeft > 0) {
