@@ -1,4 +1,6 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
+
+const API_URL = 'https://glow-log-api.mexil-ronyca.workers.dev';
 import { Syringe, Trash2, TrendingUp, Sparkles, Moon, Star, Upload, Scale, Info } from 'lucide-react';
 
 const SYMPTOMS = [
@@ -102,17 +104,36 @@ export default function App() {
   const [showPngInfo, setShowPngInfo] = useState(false);
   const fileInputRef = useRef(null);
 
-  useEffect(() => {
+useEffect(() => {
+  async function loadData() {
     try {
-      const e = localStorage.getItem('glp1-entries');
-      if (e) setEntries(JSON.parse(e));
-    } catch (err) { /* no data yet */ }
-    try {
-      const w = localStorage.getItem('glp1-weight-data');
-      if (w) setWeightData(JSON.parse(w));
-    } catch (err) { /* no data yet */ }
+      const response = await fetch(`${API_URL}/api/state`);
+      const cloud = await response.json();
+
+      if (cloud.entries) setEntries(cloud.entries);
+      if (cloud.weightData) setWeightData(cloud.weightData);
+
+      // Keep a local backup too
+      localStorage.setItem('glp1-entries', JSON.stringify(cloud.entries || {}));
+      localStorage.setItem('glp1-weight-data', JSON.stringify(cloud.weightData || {}));
+    } catch (err) {
+      // If cloud is unavailable, use the local backup
+      try {
+        const e = localStorage.getItem('glp1-entries');
+        if (e) setEntries(JSON.parse(e));
+      } catch (err) {}
+
+      try {
+        const w = localStorage.getItem('glp1-weight-data');
+        if (w) setWeightData(JSON.parse(w));
+      } catch (err) {}
+    }
+
     setLoading(false);
-  }, []);
+  }
+
+  loadData();
+}, []);
 
   useEffect(() => {
     const existing = entries[selectedDate];
@@ -124,24 +145,44 @@ export default function App() {
     setTimeout(() => setToast(''), 2200);
   };
 
-  const saveEntry = () => {
-    const hasContent = draft.dose || Object.keys(draft.symptoms).length > 0 || draft.notes;
-    if (!hasContent) {
-      showToast('Nothing to save yet');
-      return;
-    }
-    setSaving(true);
-    const updated = { ...entries, [selectedDate]: draft };
-    setEntries(updated);
-    try {
-      localStorage.setItem('glp1-entries', JSON.stringify(updated));
-      showToast('Saved ✓');
-    } catch (e) {
-      showToast('Save failed — try again');
-    } finally {
-      setSaving(false);
-    }
-  };
+const saveEntry = async () => {
+  const hasContent =
+    draft.dose ||
+    Object.keys(draft.symptoms).length > 0 ||
+    draft.notes;
+
+  if (!hasContent) {
+    showToast('Nothing to save yet');
+    return;
+  }
+
+  setSaving(true);
+
+  const updated = { ...entries, [selectedDate]: draft };
+  setEntries(updated);
+
+  try {
+    localStorage.setItem('glp1-entries', JSON.stringify(updated));
+
+    const cloudResponse = await fetch(`${API_URL}/api/state`);
+    const cloud = await cloudResponse.json();
+
+    await fetch(`${API_URL}/api/state`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ...cloud,
+        entries: updated
+      })
+    });
+
+    showToast('Saved ✓');
+  } catch (err) {
+    showToast('Saved locally');
+  } finally {
+    setSaving(false);
+  }
+};
 
   const deleteEntry = (date) => {
     const updated = { ...entries };
