@@ -150,20 +150,28 @@ useEffect(() => {
 }, []);
 
   useEffect(() => {
-    const existing = entries[selectedDate];
-   setDraft(
-  existing
-    ? { medication: '', ...existing }
-    : {
-        medication: '',
-        dose: '',
-        doseUnit: 'mg',
-        injectionSite: '',
-        symptoms: {},
-        notes: ''
-      }
-);
-  }, [selectedDate, entries]);
+  const existing = entries[selectedDate];
+
+  if (existing) {
+    setDraft({
+      medication: '',
+      dose: '',
+      doseUnit: 'mg',
+      injectionSite: '',
+      symptoms: existing.symptoms || {},
+      notes: existing.notes || ''
+    });
+  } else {
+    setDraft({
+      medication: '',
+      dose: '',
+      doseUnit: 'mg',
+      injectionSite: '',
+      symptoms: {},
+      notes: ''
+    });
+  }
+}, [selectedDate, entries]);
 
   const showToast = (msg) => {
     setToast(msg);
@@ -195,10 +203,60 @@ const saveEntry = async () => {
     medication: cleanedMedication,
   };
 
-  const updated = {
-    ...entries,
-    [selectedDate]: savedDraft,
-  };
+const existingEntry = entries[selectedDate];
+
+const updated = {
+  ...entries,
+  [selectedDate]: {
+    symptoms: savedDraft.symptoms || {},
+notes: savedDraft.notes || '',
+    injections: savedDraft.dose
+  ? existingEntry?.injections
+    ? [
+        ...existingEntry.injections,
+        {
+          medication: savedDraft.medication,
+          dose: savedDraft.dose,
+          doseUnit: savedDraft.doseUnit,
+          injectionSite: savedDraft.injectionSite
+        }
+      ]
+    : existingEntry?.dose
+      ? [
+          {
+            medication: existingEntry.medication || '',
+            dose: existingEntry.dose,
+            doseUnit: existingEntry.doseUnit || 'mg',
+            injectionSite: existingEntry.injectionSite || ''
+          },
+          {
+            medication: savedDraft.medication,
+            dose: savedDraft.dose,
+            doseUnit: savedDraft.doseUnit,
+            injectionSite: savedDraft.injectionSite
+          }
+        ]
+      : [
+          {
+            medication: savedDraft.medication,
+            dose: savedDraft.dose,
+            doseUnit: savedDraft.doseUnit,
+            injectionSite: savedDraft.injectionSite
+          }
+        ]
+  : existingEntry?.injections ||
+    (existingEntry?.dose
+      ? [
+          {
+            medication: existingEntry.medication || '',
+            dose: existingEntry.dose,
+            doseUnit: existingEntry.doseUnit || 'mg',
+            injectionSite: existingEntry.injectionSite || ''
+          }
+        ]
+      : [])
+  },
+};
 
   const updatedMedications =
     cleanedMedication &&
@@ -338,14 +396,45 @@ const deleteEntry = async (date) => {
     [entries]
   );
 
-  const doseHistory = useMemo(
-    () => sortedDates
-      .filter((d) => entries[d].dose)
-      .slice(0, 6)
-      .reverse()
-      .map((d) => ({ date: d, dose: parseFloat(entries[d].dose) || 0 })),
-    [entries, sortedDates]
-  );
+  const doseHistory = useMemo(() => {
+  const rows = [];
+
+  sortedDates.forEach((date) => {
+    const entry = entries[date];
+
+    if (entry?.injections?.length) {
+      entry.injections.forEach((inj, index) => {
+        if (inj.dose) {
+          rows.push({
+            key: `${date}-${index}`,
+            date,
+            medication: inj.medication || '',
+            dose: parseFloat(inj.dose) || 0,
+          });
+        }
+      });
+    } else if (entry?.dose) {
+      rows.push({
+        key: date,
+        date,
+        medication: entry.medication || '',
+        dose: parseFloat(entry.dose) || 0,
+      });
+    }
+  });
+
+  const latestMedication =
+  rows.find((row) => row.medication)?.medication || '';
+
+const filteredRows = latestMedication
+  ? rows.filter(
+      (row) =>
+        row.medication.toLowerCase() === latestMedication.toLowerCase()
+    )
+  : rows;
+
+return filteredRows.slice(0, 6).reverse();
+}, [entries, sortedDates]);
 
   const maxDose = Math.max(1, ...doseHistory.map((d) => d.dose));
 
@@ -803,11 +892,24 @@ const deleteEntry = async (date) => {
                         <Trash2 size={14} />
                       </button>
                     </div>
-                    {e.dose && (
-                      <div style={{ fontSize: 12, color: '#5B4285', marginTop: 6 }}>
-                       💉 {e.medication ? `${e.medication} · ` : ''}{e.dose} {e.doseUnit}{e.injectionSite ? ` · ${e.injectionSite}` : ''}
-                      </div>
-                    )}
+                    {e.injections?.length > 0 ? (
+  e.injections.map((inj, index) => (
+    <div
+      key={index}
+      style={{ fontSize: 12, color: '#5B4285', marginTop: 6 }}
+    >
+      💉 {inj.medication ? `${inj.medication} · ` : ''}
+      {inj.dose} {inj.doseUnit}
+      {inj.injectionSite ? ` · ${inj.injectionSite}` : ''}
+    </div>
+  ))
+) : e.dose ? (
+  <div style={{ fontSize: 12, color: '#5B4285', marginTop: 6 }}>
+    💉 {e.medication ? `${e.medication} · ` : ''}
+    {e.dose} {e.doseUnit}
+    {e.injectionSite ? ` · ${e.injectionSite}` : ''}
+  </div>
+) : null}
                     {activeSymptoms.length > 0 && (
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
                         {activeSymptoms.map(([key, lvl]) => {
