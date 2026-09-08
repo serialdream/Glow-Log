@@ -184,17 +184,43 @@ const saveEntry = async () => {
   }
 };
 
-  const deleteEntry = (date) => {
-    const updated = { ...entries };
-    delete updated[date];
-    setEntries(updated);
-    try {
-      localStorage.setItem('glp1-entries', JSON.stringify(updated));
-      showToast('Deleted');
-    } catch (e) {
-      showToast('Delete failed');
+const deleteEntry = async (date) => {
+  const updated = { ...entries };
+  delete updated[date];
+
+  setEntries(updated);
+  localStorage.setItem('glp1-entries', JSON.stringify(updated));
+
+  try {
+    const cloudResponse = await fetch(`${API_URL}/api/state`);
+
+    if (!cloudResponse.ok) {
+      throw new Error(`Cloud load failed: ${cloudResponse.status}`);
     }
-  };
+
+    const cloud = await cloudResponse.json();
+
+    const saveResponse = await fetch(`${API_URL}/api/state`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        ...cloud,
+        entries: updated,
+      }),
+    });
+
+    if (!saveResponse.ok) {
+      throw new Error(`Cloud delete failed: ${saveResponse.status}`);
+    }
+
+    showToast('Deleted ✓');
+  } catch (err) {
+    console.error(err);
+    showToast('Deleted locally');
+  }
+};
 
   const setSymptom = (key, level) => {
     setDraft((d) => ({ ...d, symptoms: { ...d.symptoms, [key]: level } }));
