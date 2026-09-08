@@ -271,18 +271,6 @@ export default function FitLog() {
         JSON.stringify(mergedCardio)
       );
 
-      await fetch(`${API_URL}/api/state`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          ...cloud,
-          sessions: mergedSessions,
-          cardioEntries: mergedCardio,
-        }),
-      });
-
     } catch (err) {
       console.log('Cloud unavailable, keeping local Fit Log data', err);
 
