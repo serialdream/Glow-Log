@@ -97,7 +97,14 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState(todayStr());
   const [view, setView] = useState('log');
-  const [draft, setDraft] = useState({ dose: '', doseUnit: 'mg', injectionSite: '', symptoms: {}, notes: '' });
+  const [draft, setDraft] = useState({ medication: '', dose: '', doseUnit: 'mg', injectionSite: '', symptoms: {}, notes: '' });
+  const [medications, setMedications] = useState(() => {
+  try {
+    return JSON.parse(localStorage.getItem('glow-log-medications')) || ['Retatrutide'];
+  } catch {
+    return ['Retatrutide'];
+  }
+});
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [toast, setToast] = useState('');
@@ -111,6 +118,13 @@ useEffect(() => {
       const cloud = await response.json();
 
       if (cloud.entries) setEntries(cloud.entries);
+      if (cloud.medications) {
+  setMedications(cloud.medications);
+  localStorage.setItem(
+    'glow-log-medications',
+    JSON.stringify(cloud.medications)
+  );
+}
       if (cloud.weightData) setWeightData(cloud.weightData);
 
       // Keep a local backup too
@@ -137,7 +151,18 @@ useEffect(() => {
 
   useEffect(() => {
     const existing = entries[selectedDate];
-    setDraft(existing ? { ...existing } : { dose: '', doseUnit: 'mg', injectionSite: '', symptoms: {}, notes: '' });
+   setDraft(
+  existing
+    ? { medication: '', ...existing }
+    : {
+        medication: '',
+        dose: '',
+        doseUnit: 'mg',
+        injectionSite: '',
+        symptoms: {},
+        notes: ''
+      }
+);
   }, [selectedDate, entries]);
 
   const showToast = (msg) => {
@@ -146,6 +171,8 @@ useEffect(() => {
   };
 
 const saveEntry = async () => {
+  const cleanedMedication = draft.medication.trim();
+
   const hasContent =
     draft.dose ||
     Object.keys(draft.symptoms).length > 0 ||
@@ -156,28 +183,68 @@ const saveEntry = async () => {
     return;
   }
 
+  if (draft.dose && !cleanedMedication) {
+    showToast('Enter a medication');
+    return;
+  }
+
   setSaving(true);
 
-  const updated = { ...entries, [selectedDate]: draft };
+  const savedDraft = {
+    ...draft,
+    medication: cleanedMedication,
+  };
+
+  const updated = {
+    ...entries,
+    [selectedDate]: savedDraft,
+  };
+
+  const updatedMedications =
+    cleanedMedication &&
+    !medications.some(
+      (med) => med.toLowerCase() === cleanedMedication.toLowerCase()
+    )
+      ? [...medications, cleanedMedication]
+      : medications;
+
   setEntries(updated);
+  setMedications(updatedMedications);
+
+  localStorage.setItem('glp1-entries', JSON.stringify(updated));
+  localStorage.setItem(
+    'glow-log-medications',
+    JSON.stringify(updatedMedications)
+  );
 
   try {
-    localStorage.setItem('glp1-entries', JSON.stringify(updated));
-
     const cloudResponse = await fetch(`${API_URL}/api/state`);
+
+    if (!cloudResponse.ok) {
+      throw new Error(`Cloud load failed: ${cloudResponse.status}`);
+    }
+
     const cloud = await cloudResponse.json();
 
-    await fetch(`${API_URL}/api/state`, {
+    const saveResponse = await fetch(`${API_URL}/api/state`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+      },
       body: JSON.stringify({
         ...cloud,
-        entries: updated
-      })
+        entries: updated,
+        medications: updatedMedications,
+      }),
     });
+
+    if (!saveResponse.ok) {
+      throw new Error(`Cloud save failed: ${saveResponse.status}`);
+    }
 
     showToast('Saved ✓');
   } catch (err) {
+    console.error(err);
     showToast('Saved locally');
   } finally {
     setSaving(false);
@@ -486,10 +553,35 @@ const deleteEntry = async (date) => {
               border: '1px solid rgba(255,255,255,0.6)',
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-                <Syringe size={16} color="#8A6EDD" />
-                <span style={{ fontWeight: 800, color: '#6D45C4', fontSize: 14 }}>Injection</span>
-              </div>
-              <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+  <Syringe size={16} color="#8A6EDD" />
+  <span style={{ fontWeight: 800, color: '#6D45C4', fontSize: 14 }}>Injection</span>
+</div>
+
+<input
+  type="text"
+  list="medication-options"
+  placeholder="Medication"
+  value={draft.medication}
+  onChange={(e) =>
+    setDraft((d) => ({ ...d, medication: e.target.value }))
+  }
+  style={{
+    width: '100%',
+    padding: '10px 14px',
+    borderRadius: 12,
+    border: '1.5px solid #E4D9FA',
+    fontSize: 14,
+    color: '#5B4285',
+    background: '#FBF9FF',
+    marginBottom: 10,
+  }}
+/>
+<datalist id="medication-options">
+  {medications.map((med) => (
+    <option key={med} value={med} />
+  ))}
+</datalist>
+<div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
                 <input
                   type="number"
                   step="0.25"
@@ -713,7 +805,7 @@ const deleteEntry = async (date) => {
                     </div>
                     {e.dose && (
                       <div style={{ fontSize: 12, color: '#5B4285', marginTop: 6 }}>
-                        💉 {e.dose} {e.doseUnit}{e.injectionSite ? ` · ${e.injectionSite}` : ''}
+                       💉 {e.medication ? `${e.medication} · ` : ''}{e.dose} {e.doseUnit}{e.injectionSite ? ` · ${e.injectionSite}` : ''}
                       </div>
                     )}
                     {activeSymptoms.length > 0 && (
